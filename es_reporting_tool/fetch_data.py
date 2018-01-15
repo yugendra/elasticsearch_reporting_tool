@@ -3,10 +3,11 @@ from elasticsearch_dsl import Search
 import os.path
 from prettytable import PrettyTable
 
+#from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
-from reportlab.lib.pagesizes import letter
+from reportlab.lib.pagesizes import landscape, A4
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, \
     Table, TableStyle
 from operator import itemgetter
@@ -16,7 +17,7 @@ class DataToPdf():
     Export a list of dictionaries to a table in a PDF file.
     """
 
-    def __init__(self, fields, data, sort_by=None, title=None):
+    def __init__(self, fields, sort_by=None, title=None):
         """
         Arguments:
             fields - A tuple of tuples ((fieldname/key, display_name))
@@ -29,11 +30,14 @@ class DataToPdf():
             title - The title to display at the beginning of the document.
         """
         self.fields = fields
-        self.data = data
         self.title = title
         self.sort_by = sort_by
+        self.doc = SimpleDocTemplate('SenderList.pdf', pagesize=A4)
+        self.styles = getSampleStyleSheet()
+        self.styleH = self.styles['Heading1']
+        self.story = []
 
-    def export(self, filename, data_align='LEFT', table_halign='LEFT'):
+    def export(self, sender, data, data_align='LEFT', table_halign='LEFT'):
         """
         Export the data to a PDF file.
 
@@ -44,50 +48,58 @@ class DataToPdf():
             table_halign - Horizontal alignment of the table on the page
                 (eg. 'LEFT', 'CENTER', 'RIGHT')
         """
-        doc = SimpleDocTemplate(filename, pagesize=letter)
 
-        self.styles = getSampleStyleSheet()
-        styleH = self.styles['Heading1']
+        
+        
+        self.story.append(Paragraph(sender, self.styleH))
 
-        story = []
-
+        '''
         if self.title:
-            story.append(Paragraph(self.title, styleH))
+            story.append(Paragraph(self.title, self.styleH))
             story.append(Spacer(1, 0.25 * inch))
+        
 
         if self.sort_by:
             reverse_order = False
             if (str(self.sort_by[1]).upper() == 'DESC'):
                 reverse_order = True
 
-            self.data = sorted(self.data,
+            data = sorted(data,
                                key=itemgetter(self.sort_by[0]),
                                reverse=reverse_order)
+        '''
 
-        #converted_data = self.__convert_data()
-        #print converted_data
-        #data1 = Paragraph('saasassaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', self.styles["BodyText"])
-        #data2 = Paragraph('saasassaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa', self.styles["BodyText"])
-        #converted_data = [['ssd','sds'],[data1,data2]]
-        
-        converted_data = [['Sender', 'Recipient', 'Subject']]
-        for d in self.data:
-            sender = d['sender']
+        converted_data = [['Recipient', 'Subject', 'Size', 'Attachment']]
+        for d in data:
+            #print d
             try:
-                recipient = d['recipient']
+                recipient = d['RECIPIENT']
             except:
-                pass
+                recipient = ''
                 
             try:
-                subject = d['subject']
+                subject = d['SUBJECT']
             except:
-                pass
-            data1 = [Paragraph(sender, self.styles['BodyText']), Paragraph(recipient, self.styles['BodyText']), Paragraph(subject, self.styles['BodyText'])]
-            print data1
+                subject = ''
+                
+            try:
+                size = d['SIZE']
+            except:
+                size = ''
+
+            try:
+                attachment = d['ATTACHMENT']
+            except:
+                attachment = ''
+                
+            data1 = [Paragraph(recipient, self.styles['BodyText']),
+                        Paragraph(subject, self.styles['BodyText']),
+                        Paragraph(size, self.styles['BodyText']),
+                        Paragraph(attachment, self.styles['BodyText'])]
+            #print data1
             converted_data.append(data1)
             
-        
-        table = Table(converted_data, hAlign=table_halign, colWidths=[2 * inch, 2 * inch, 3 * inch])
+        table = Table(converted_data, hAlign=table_halign, colWidths=[1.5 * inch, 3 * inch, 1 * inch, 1.5 * inch])
         table.setStyle(TableStyle([
             ('FONT', (0, 0), (-1, 0), 'Helvetica-Bold'),
             ('ALIGN', (0, 0), (-1, 0), 'CENTER'),
@@ -96,8 +108,10 @@ class DataToPdf():
             ('BOX', (0,0), (-1,-1), 0.25, colors.black),
         ]))
 
-        story.append(table)
-        doc.build(story)
+        self.story.append(table)
+        
+    def build_doc(self):    
+        self.doc.build(self.story)
 
     def __convert_data(self):
         """
@@ -110,17 +124,7 @@ class DataToPdf():
         keys, names = zip(*[[k, n] for k, n in self.fields])
         new_data = [names]
 
-        '''
-        for d in self.data:
-            try:
-                for k in keys:
-                    data = Paragraph(d[k], self.styles['Normal'])
-                    print d[k]
-                    new_data.append(data)
-            except:
-                pass
-        print new_data
-        '''
+       
         new_data.append(Paragraph('text1', self.styles['BodyText']))
         return new_data
 
@@ -142,7 +146,18 @@ def file_cleanup():
         os.remove('SenderList.pdf')
     except OSError:
         pass
+        
+def get_sender_list(client):
+    s = Search(using=client, index='filebeat*')
+    s = s.query('match', MTA='postfix-outgoing')
+    s = s.query('regexp', SENDER='@athagroup.in')
+    s = s.source(['SENDER'])
+    data=[]
+    for hit in s.scan():
+        data.append(hit.__dict__['_d_']['SENDER'])
 
+    return sorted(set(data))
+    
 def fetch_data():
     '''
     Fetch the data from elasticsearch.
@@ -151,33 +166,45 @@ def fetch_data():
     Convert fetched objects into json format and write into the file.
     '''
     client = Elasticsearch([{'host': 'localhost', 'port': 9200}])
-    s = Search(using=client, index='filebeat*')
-    s = s.query('match', sender='subrat.ghosh@athagroup.in')
-    s = s.source(['sender','recipient','subject'])
+    sender_list = get_sender_list(client)
+    
+    fields = (
+        ('RECIPIENT', 'Recipient'),
+        ('SUBJECT', 'Subject'),
+        ('SIZE', 'Size'),
+        ('ATTACHMENT', 'Attachment'),
+    )
+    
+    doc = DataToPdf(fields, sort_by=('SENDER', 'ASC'),
+                    title='Sender List')
+    
+    for sender in sender_list:
+        s = Search(using=client, index='filebeat*')
+        s = s.query('match', MTA='postfix-outgoing')
+        s = s.query('match', SENDER=sender)
+        s = s.source(['RECIPIENT','SUBJECT', 'SIZE', 'ATTACHMENT'])
+        
+        data=[]
+     
+        for hit in s.scan():
+            data.append(hit.__dict__['_d_'])
+            
+        doc.export(sender, data)
+    
+    doc.build_doc()
     
     #fh = open('data.json', 'w')
-    pt = PrettyTable(["Sender", "Recipient", "Subject"])
+    '''
+    pt = PrettyTable(["Sender", "Recipient", "Subject", "Size", "Attachment"])
     pt.align["Sender"] = "l"
     pt.align["Recipient"] = "l"
     pt.align["Subject"] = "l"
+    pt.align["Size"] = "l"
+    pt.align["Attachment"] = "l"
     pt.padding_width = 1
+    '''
     
-    data=[]
-     
-    for hit in s.scan():
-        #fh.write(json.dumps(hit, default=lambda o: o.__dict__))
-        #print(json.dumps(hit, default=lambda o: o.__dict__))
-        data.append(hit.__dict__['_d_'])
     
-    fields = (
-        ('sender', 'Sender'),
-        ('recipient', 'Recipient'),
-        ('subject', 'Subject'),
-    )
-    
-    doc = DataToPdf(fields, data, sort_by=('sender', 'ASC'),
-                    title='Sender List')
-    doc.export('SenderList.pdf')
 
     #fh.close()
         
