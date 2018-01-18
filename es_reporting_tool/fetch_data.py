@@ -1,9 +1,11 @@
+from report import CreateReport
+
 from elasticsearch import Elasticsearch
-from elasticsearch_dsl import Search
+from elasticsearch_dsl import Search, Q
+
 import os.path
 from prettytable import PrettyTable
 
-#from reportlab.pdfgen import canvas
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
 from reportlab.lib.units import inch
@@ -111,6 +113,7 @@ class DataToPdf():
         self.story.append(table)
         
     def build_doc(self):    
+        print "In build doc"
         self.doc.build(self.story)
 
     def __convert_data(self):
@@ -147,16 +150,75 @@ def file_cleanup():
     except OSError:
         pass
         
-def get_sender_list(client):
-    s = Search(using=client, index='filebeat*')
-    s = s.query('match', MTA='postfix-outgoing')
-    s = s.query('regexp', SENDER='@athagroup.in')
-    s = s.source(['SENDER'])
+def get_user_list(client):
+    sender = Search(using=client, index='filebeat*')
+    sender = sender.query('match', MTA='postfix-outgoing')
+    sender = sender.query('regexp', SENDER='@athagroup.in')
+    sender = sender.source(['SENDER'])
     data=[]
-    for hit in s.scan():
+    for hit in sender.scan():
         data.append(hit.__dict__['_d_']['SENDER'])
 
-    return sorted(set(data))
+    sender_list = sorted(set(data))
+    
+    recipient = Search(using=client, index='filebeat*')
+    recipient = recipient.query('match', MTA='postfix-outgoing')
+    recipient = recipient.query('regexp', RECIPIENT='@athagroup.in')
+    recipient = recipient.source(['RECIPIENT'])
+    data=[]
+    for hit in recipient.scan():
+        data.append(hit.__dict__['_d_']['RECIPIENT'])
+
+    recipient_list = sorted(set(data))
+    
+    user_list = []
+    user_list.extend(sender_list)
+    user_list.extend(recipient_list)
+    
+    return sorted(set(user_list))
+    
+def split_email(email): 
+    user = email.split('@')
+    return user[0]
+    
+def get_sender_data(client, user):
+    user_id = split_email(user)
+    sender = Search(using=client, index='filebeat*')
+    q = Q('bool', must=[Q('match', SENDER=user_id)]) & Q('bool', must=[Q('match', SENDER="athagroup.in")])
+    sender = sender.query(q)
+    sender = sender.source(['SENDER','RECIPIENT', 'SUBJECT', 'SIZE', 'ATTACHMENT', '@timestamp'])
+    data=[]
+    for hit in sender.scan():
+        if 'bounce' not in hit.__dict__['_d_']['SENDER'] and '=athagroup.in' not in hit.__dict__['_d_']['SENDER']:
+            record = []
+            record.append(hit.__dict__['_d_']['@timestamp'])
+            record.append(hit.__dict__['_d_']['RECIPIENT'])
+            record.append(hit.__dict__['_d_']['SUBJECT'])
+            record.append(hit.__dict__['_d_']['SIZE'])
+            record.append(hit.__dict__['_d_']['ATTACHMENT'])
+            data.append(record)
+        
+    return data
+    
+def get_recipient_data(client, user):
+    user_id = split_email(user)
+    recipient = Search(using=client, index='filebeat*')
+    q = Q('bool', must=[Q('match', RECIPIENT=user_id)]) & Q('bool', must=[Q('match', RECIPIENT="athagroup.in")]) & Q('bool', must=[Q('match', MTA="QMAIL")])
+    recipient = recipient.query(q)
+    recipient = recipient.source(['SENDER','RECIPIENT', 'SUBJECT', 'SIZE', 'ATTACHMENT', '@timestamp'])
+    data=[]
+    for hit in recipient.scan():
+        if 'bounce' not in hit.__dict__['_d_']['RECIPIENT'] and '=athagroup.in' not in hit.__dict__['_d_']['RECIPIENT']:
+            record = []
+            record.append(hit.__dict__['_d_']['@timestamp'])
+            record.append(hit.__dict__['_d_']['SENDER'])
+            record.append(hit.__dict__['_d_']['SUBJECT'])
+            record.append(hit.__dict__['_d_']['SIZE'])
+            record.append(hit.__dict__['_d_']['ATTACHMENT'])
+            data.append(record)
+        
+    return data
+    
     
 def fetch_data():
     '''
@@ -165,48 +227,26 @@ def fetch_data():
     Returns only specified fields
     Convert fetched objects into json format and write into the file.
     '''
+    
     client = Elasticsearch([{'host': 'localhost', 'port': 9200}])
-    sender_list = get_sender_list(client)
+    user_list = get_user_list(client)
+    sender_fields = [['Time', 'Recipient', 'Subject', 'Size', 'Attachment']]
+    recipient_fields = [['Time', 'Sender', 'Subject', 'Size', 'Attachment']]
     
-    fields = (
-        ('RECIPIENT', 'Recipient'),
-        ('SUBJECT', 'Subject'),
-        ('SIZE', 'Size'),
-        ('ATTACHMENT', 'Attachment'),
-    )
+    doc = CreateReport(title='report.pdf')
     
-    doc = DataToPdf(fields, sort_by=('SENDER', 'ASC'),
-                    title='Sender List')
+    for user in user_list:
+        if not '=athagroup.in' in user:
+            #print user
+            doc.add_text(user)
+            doc.add_text("Mail Sent")
+            doc.add_table_headings(sender_fields)
+            doc.add_table_headings(get_sender_data(client, user))
+            doc.add_text("Mail Recived")
+            doc.add_table_headings(recipient_fields)
+            doc.add_table_headings(get_recipient_data(client, user))
     
-    for sender in sender_list:
-        s = Search(using=client, index='filebeat*')
-        s = s.query('match', MTA='postfix-outgoing')
-        s = s.query('match', SENDER=sender)
-        s = s.source(['RECIPIENT','SUBJECT', 'SIZE', 'ATTACHMENT'])
-        
-        data=[]
-     
-        for hit in s.scan():
-            data.append(hit.__dict__['_d_'])
-            
-        doc.export(sender, data)
-    
-    doc.build_doc()
-    
-    #fh = open('data.json', 'w')
-    '''
-    pt = PrettyTable(["Sender", "Recipient", "Subject", "Size", "Attachment"])
-    pt.align["Sender"] = "l"
-    pt.align["Recipient"] = "l"
-    pt.align["Subject"] = "l"
-    pt.align["Size"] = "l"
-    pt.align["Attachment"] = "l"
-    pt.padding_width = 1
-    '''
-    
-    
-
-    #fh.close()
+    doc.create()
         
 if __name__ == "__main__":
     file_cleanup()
