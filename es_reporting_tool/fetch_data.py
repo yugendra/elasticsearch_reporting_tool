@@ -234,17 +234,19 @@ def fetch_data():
     recipient_fields = [['Time', 'Sender', 'Subject', 'Size', 'Attachment']]
     
     doc = CreateReport(title='report.pdf')
+    doc.add_report_header('Athagroup.in')
     
     for user in user_list:
         if not '=athagroup.in' in user:
             #print user
-            doc.add_text(user)
-            doc.add_text("Mail Sent")
-            doc.add_table_headings(sender_fields)
-            doc.add_table_headings(get_sender_data(client, user))
-            doc.add_text("Mail Recived")
-            doc.add_table_headings(recipient_fields)
-            doc.add_table_headings(get_recipient_data(client, user))
+            doc.add_user_header(user)
+            doc.add_user_header("Mail Sent")
+            doc.add_table_data(sender_fields, style='THeader')
+            doc.add_table_data(get_sender_data(client, user), style='TData')
+            doc.add_user_header("Mail Received")
+            doc.add_table_data(recipient_fields, style='THeader')
+            doc.add_table_data(get_recipient_data(client, user), style='TData')
+            doc.add_user_header(" ")
     
     doc.create()
         
