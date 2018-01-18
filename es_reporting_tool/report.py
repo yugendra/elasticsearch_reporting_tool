@@ -20,7 +20,6 @@ class CreateReport():
         self.normalStyle.wordWrap = 'CJK'
         self.story = []
         
-        
     def wrap_text(self, data, style):
         row = []
         for filed in data:
@@ -58,9 +57,8 @@ class CreateReport():
             ('INNERGRID', (0, 0), (-1, -1), 0.50, colors.black),
             ('BOX', (0,0), (-1,-1), 0.25, colors.black),
         ]))
-        #table.wrapOn(self.doc, width, height)
+        
         self.story.append(table)
         
     def create(self):
-        #print self.story
         self.doc.build(self.story)
