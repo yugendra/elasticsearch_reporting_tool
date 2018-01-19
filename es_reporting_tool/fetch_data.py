@@ -5,6 +5,7 @@ from elasticsearch_dsl import Search, Q
 def get_user_list(client):
     sender = Search(using=client, index='filebeat*')
     sender = sender.query('match', SENDER='athagroup.in')
+    sender = sender.filter('range', **{'@timestamp':{'gte': 'now-30d' , 'lt': 'now'}})
     sender = sender.source(['SENDER'])
     data=[]
     for hit in sender.scan():
@@ -14,6 +15,7 @@ def get_user_list(client):
     
     recipient = Search(using=client, index='filebeat*')
     recipient = recipient.query('match', RECIPIENT='athagroup.in')
+    recipient = recipient.filter('range', **{'@timestamp':{'gte': 'now-30d' , 'lt': 'now'}})
     recipient = recipient.source(['RECIPIENT'])
     data=[]
     for hit in recipient.scan():
@@ -35,10 +37,6 @@ def get_user_list(client):
             
     return filtered_user_list
     
-def split_email(email): 
-    user = email.split('@')
-    return user[0]
-    
 def format_time(time):
     time = time.rstrip('Z')
     split_time = time.split('T')
@@ -46,14 +44,25 @@ def format_time(time):
     return new_time
     
 def get_sender_data(client, user):
-    #user_id = split_email(user)
     sender = Search(using=client, index='filebeat*')
-    #q = Q('bool', must=[Q('match', SENDER=user)]) #& Q('bool', must=[Q('match', SENDER="athagroup.in")])
     sender = sender.query('match', SENDER=user)
-    sender = sender.source(['SENDER','RECIPIENT', 'SUBJECT', 'SIZE', 'ATTACHMENT', '@timestamp'])
+    sender = sender.filter('range', **{'@timestamp':{'gte': 'now-30d' , 'lt': 'now'}})
+    sender = sender.source(['SENDER','RECIPIENT', 'SUBJECT', 'SIZE', 'ATTACHMENT', '@timestamp', 'MTA'])
     data=[]
     for hit in sender.scan():
-        if hit.__dict__['_d_']['SENDER'] == user:
+        sender_ph = hit.__dict__['_d_']['SENDER']
+        recipient_ph = hit.__dict__['_d_']['RECIPIENT']
+        mta_ph = hit.__dict__['_d_']['MTA']
+        if sender_ph == user and mta_ph == 'postfix-outgoing':
+            record = []
+            time = format_time(hit.__dict__['_d_']['@timestamp'])
+            record.append(time)
+            record.append(hit.__dict__['_d_']['RECIPIENT'])
+            record.append(hit.__dict__['_d_']['SUBJECT'])
+            record.append(hit.__dict__['_d_']['SIZE'])
+            record.append(hit.__dict__['_d_']['ATTACHMENT'])
+            data.append(record)
+        if sender_ph == user and mta_ph == 'QMAIL' and '@athagroup.in' in recipient_ph:
             record = []
             time = format_time(hit.__dict__['_d_']['@timestamp'])
             record.append(time)
@@ -66,10 +75,9 @@ def get_sender_data(client, user):
     return data
     
 def get_recipient_data(client, user):
-    #user_id = split_email(user)
     recipient = Search(using=client, index='filebeat*')
-    #q = Q('bool', must=[Q('match', RECIPIENT=user_id)]) & Q('bool', must=[Q('match', RECIPIENT="athagroup.in")]) & Q('bool', must=[Q('match', MTA="QMAIL")])
     recipient = recipient.query('match', RECIPIENT=user)
+    recipient = recipient.filter('range', **{'@timestamp':{'gte': 'now-30d' , 'lt': 'now'}})
     recipient = recipient.source(['SENDER','RECIPIENT', 'SUBJECT', 'SIZE', 'ATTACHMENT', '@timestamp'])
     data=[]
     for hit in recipient.scan():
@@ -89,15 +97,13 @@ def get_recipient_data(client, user):
 def fetch_data():
     client = Elasticsearch([{'host': 'localhost', 'port': 9200}])
     user_list = get_user_list(client)
-    sender_fields = [['Time', 'Recipient', 'Subject', 'Size', 'Attachment']]
-    recipient_fields = [['Time', 'Sender', 'Subject', 'Size', 'Attachment']]
+    sender_fields = [['Time', 'Recipient', 'Subject', 'Size Bytes', 'Attachment']]
+    recipient_fields = [['Time', 'Sender', 'Subject', 'Size Bytes', 'Attachment']]
     
     doc = CreateReport(title='report.pdf')
     doc.add_report_header('Athagroup.in')
     
     for user in user_list:
-        print user
-        
         doc.add_user_header(user)
         doc.add_user_header("Mail Sent")
         doc.add_table_data(sender_fields, style='THeader')
