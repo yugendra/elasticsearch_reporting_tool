@@ -3,18 +3,19 @@ from email.MIMEMultipart import MIMEMultipart
 from email.MIMEText import MIMEText
 from email.MIMEBase import MIMEBase
 from email import encoders
+from config import email_config as cfg
  
 def send_email_report(report_file):
-    fromaddr = "ykhonde@gmail.com"
-    toaddr = "yugendra.mail@gmail.com"
+    fromaddr = cfg['email_fromaddr']
+    toaddr = cfg['email_toaddr']
     
     msg = MIMEMultipart()
     
     msg['From'] = fromaddr
     msg['To'] = toaddr
-    msg['Subject'] = "athagroup.in email report."
+    msg['Subject'] = cfg['email_subject']
     
-    body = "Please find report in attachments."
+    body = cfg['email_body']
     
     msg.attach(MIMEText(body, 'plain'))
     
@@ -28,9 +29,9 @@ def send_email_report(report_file):
     
     msg.attach(part)
     
-    server = smtplib.SMTP('smtp.gmail.com', 587)
+    server = smtplib.SMTP(cfg['email_server'], cfg['email_port'])
     server.starttls()
-    server.login(fromaddr, "w205sony")
+    server.login(fromaddr, cfg['email_password'])
     text = msg.as_string()
     server.sendmail(fromaddr, toaddr, text)
     server.quit()

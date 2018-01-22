@@ -3,11 +3,12 @@ from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
 from send_report import send_email_report
 from helper import report_name, format_time
+from config import report_config as cfg
 
 def get_user_list(client):
     sender = Search(using=client, index='filebeat*')
-    sender = sender.query('match', SENDER='athagroup.in')
-    sender = sender.filter('range', **{'@timestamp':{'gte': 'now-30d' , 'lt': 'now'}})
+    sender = sender.query('match', SENDER=cfg['domain'])
+    sender = sender.filter('range', **{'@timestamp':{'gte': 'now-' + cfg['data_from_last'] , 'lt': 'now'}})
     sender = sender.source(['SENDER'])
     data=[]
     for hit in sender.scan():
@@ -16,8 +17,8 @@ def get_user_list(client):
     sender_list = sorted(set(data))
     
     recipient = Search(using=client, index='filebeat*')
-    recipient = recipient.query('match', RECIPIENT='athagroup.in')
-    recipient = recipient.filter('range', **{'@timestamp':{'gte': 'now-30d' , 'lt': 'now'}})
+    recipient = recipient.query('match', RECIPIENT=cfg['domain'])
+    recipient = recipient.filter('range', **{'@timestamp':{'gte': 'now-' + cfg['data_from_last'] , 'lt': 'now'}})
     recipient = recipient.source(['RECIPIENT'])
     data=[]
     for hit in recipient.scan():
@@ -34,7 +35,8 @@ def get_user_list(client):
     filtered_user_list = []
     
     for user in sorted_user_list:
-        if '@athagroup.in' in user:
+        domain = '@' + cfg['domain']
+        if domain in user:
             filtered_user_list.append(user)
             
     return filtered_user_list
@@ -42,9 +44,10 @@ def get_user_list(client):
 def get_sender_data(client, user):
     sender = Search(using=client, index='filebeat*')
     sender = sender.query('match', SENDER=user)
-    sender = sender.filter('range', **{'@timestamp':{'gte': 'now-30d' , 'lt': 'now'}})
+    sender = sender.filter('range', **{'@timestamp':{'gte': 'now-' + cfg['data_from_last'] , 'lt': 'now'}})
     sender = sender.source(['SENDER','RECIPIENT', 'SUBJECT', 'SIZE', 'ATTACHMENT', '@timestamp', 'MTA'])
     data=[]
+    domain = '@' + cfg['domain']
     for hit in sender.scan():
         sender_ph = hit.__dict__['_d_']['SENDER']
         recipient_ph = hit.__dict__['_d_']['RECIPIENT']
@@ -58,7 +61,7 @@ def get_sender_data(client, user):
             record.append(hit.__dict__['_d_']['SIZE'])
             record.append(hit.__dict__['_d_']['ATTACHMENT'])
             data.append(record)
-        if sender_ph == user and mta_ph == 'QMAIL' and '@athagroup.in' in recipient_ph:
+        if sender_ph == user and mta_ph == 'QMAIL' and domain in recipient_ph:
             record = []
             time = format_time(hit.__dict__['_d_']['@timestamp'])
             record.append(time)
@@ -73,7 +76,7 @@ def get_sender_data(client, user):
 def get_recipient_data(client, user):
     recipient = Search(using=client, index='filebeat*')
     recipient = recipient.query('match', RECIPIENT=user)
-    recipient = recipient.filter('range', **{'@timestamp':{'gte': 'now-30d' , 'lt': 'now'}})
+    recipient = recipient.filter('range', **{'@timestamp':{'gte': 'now-' + cfg['data_from_last'] , 'lt': 'now'}})
     recipient = recipient.source(['SENDER','RECIPIENT', 'SUBJECT', 'SIZE', 'ATTACHMENT', '@timestamp'])
     data=[]
     for hit in recipient.scan():

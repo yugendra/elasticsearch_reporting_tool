@@ -44,11 +44,7 @@ class CreateReport():
         for row in data:
             data1.append(self.wrap_text(row, style))
         
-        #try:
         table = Table(data1, hAlign=table_halign, colWidths=[1 * inch, 1.5 * inch, 3 * inch, 0.7 * inch, 3.5 * inch])
-        #except:
-            #data1 = [["SP","RP","SP","SP","AP"]]
-            #table = Table(data1, hAlign=table_halign, colWidths=[1 * inch, 1.5 * inch, 3 * inch, 0.7 * inch, 3.5 * inch])
         
         table.setStyle(TableStyle([
             ('FONT', (0, 0), (-1, 0), 'Helvetica-Bold'),
