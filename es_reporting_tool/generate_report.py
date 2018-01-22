@@ -1,8 +1,8 @@
 from reportlab.lib import colors
 from reportlab.lib.styles import getSampleStyleSheet
-from reportlab.lib.units import inch, cm
-from reportlab.lib.pagesizes import landscape, A3
-from reportlab.platypus import Paragraph, SimpleDocTemplate, Spacer, Table, TableStyle
+from reportlab.lib.units import inch
+from reportlab.lib.pagesizes import A3
+from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
 from reportlab.lib.enums import TA_CENTER
 
 class CreateReport():

@@ -1,6 +1,6 @@
 report_config = {
     'domain' : 'athagroup.in',
-    'data_from_last' : '1d'
+    'data_from_last' : '30d'
 }
 
 email_config     = {

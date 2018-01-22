@@ -1,6 +1,6 @@
 from generate_report import CreateReport
 from elasticsearch import Elasticsearch
-from elasticsearch_dsl import Search, Q
+from elasticsearch_dsl import Search
 from send_report import send_email_report
 from helper import report_name, format_time
 from config import report_config as cfg
