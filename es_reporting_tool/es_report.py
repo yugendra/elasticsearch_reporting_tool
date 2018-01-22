@@ -1,8 +1,8 @@
-import os
-from report import CreateReport
+from generate_report import CreateReport
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
-from datetime import datetime
+from send_report import send_email_report
+from helper import report_name, format_time
 
 def get_user_list(client):
     sender = Search(using=client, index='filebeat*')
@@ -38,24 +38,6 @@ def get_user_list(client):
             filtered_user_list.append(user)
             
     return filtered_user_list
-    
-def format_time(time):
-    time = time.rstrip('Z')
-    split_time = time.split('T')
-    new_time = split_time[0] + " " + split_time[1]
-    return new_time
-    
-def get_time():
-    time_now = str(datetime.now()).split()
-    return time_now[0] + ':' + time_now[1].split('.')[0]
-    
-def report_name():
-    try:
-        os.makedirs('reports')
-    except OSError as e:
-        pass
-    report_name = os.getcwd() + '/reports/report_' + get_time() + '.pdf'
-    return report_name
     
 def get_sender_data(client, user):
     sender = Search(using=client, index='filebeat*')
@@ -107,14 +89,14 @@ def get_recipient_data(client, user):
         
     return data
     
-    
 def fetch_data():
     client = Elasticsearch([{'host': 'localhost', 'port': 9200}])
     user_list = get_user_list(client)
     sender_fields = [['Time', 'Recipient', 'Subject', 'Size Bytes', 'Attachment']]
     recipient_fields = [['Time', 'Sender', 'Subject', 'Size Bytes', 'Attachment']]
     
-    doc = CreateReport(title=report_name())
+    report_file_name = report_name()
+    doc = CreateReport(title=report_file_name)
     doc.add_report_header('Athagroup.in')
     
     for user in user_list:
@@ -131,6 +113,7 @@ def fetch_data():
         
     
     doc.create()
+    send_email_report(report_file_name)
         
 if __name__ == "__main__":
     fetch_data()
