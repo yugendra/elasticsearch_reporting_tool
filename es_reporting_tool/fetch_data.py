@@ -1,6 +1,8 @@
+import os
 from report import CreateReport
 from elasticsearch import Elasticsearch
 from elasticsearch_dsl import Search, Q
+from datetime import datetime
 
 def get_user_list(client):
     sender = Search(using=client, index='filebeat*')
@@ -42,6 +44,18 @@ def format_time(time):
     split_time = time.split('T')
     new_time = split_time[0] + " " + split_time[1]
     return new_time
+    
+def get_time():
+    time_now = str(datetime.now()).split()
+    return time_now[0] + ':' + time_now[1].split('.')[0]
+    
+def report_name():
+    try:
+        os.makedirs('reports')
+    except OSError as e:
+        pass
+    report_name = os.getcwd() + '/reports/report_' + get_time() + '.pdf'
+    return report_name
     
 def get_sender_data(client, user):
     sender = Search(using=client, index='filebeat*')
@@ -100,7 +114,7 @@ def fetch_data():
     sender_fields = [['Time', 'Recipient', 'Subject', 'Size Bytes', 'Attachment']]
     recipient_fields = [['Time', 'Sender', 'Subject', 'Size Bytes', 'Attachment']]
     
-    doc = CreateReport(title='report.pdf')
+    doc = CreateReport(title=report_name())
     doc.add_report_header('Athagroup.in')
     
     for user in user_list:
