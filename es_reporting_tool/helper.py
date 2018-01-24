@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import datetime, date, timedelta
 import os
 
 def format_time(time):
@@ -18,3 +18,7 @@ def report_name():
         pass
     report_name = os.getcwd() + '/reports/report_' + get_time() + '.pdf'
     return report_name
+    
+def y_date():
+    yesterday = date.today() - timedelta(1)
+    return yesterday
