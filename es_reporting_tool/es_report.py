@@ -103,7 +103,7 @@ def fetch_data():
     doc.add_report_header('Athagroup.in')
     
     for user in user_list:
-        doc.add_user_header('ID: ' + user)
+        doc.add_user_header('ID:' + user)
         doc.add_user_header("Mail Sent")
         doc.add_table_data(sender_fields, style='THeader')
         sender_data = get_sender_data(client, user)
