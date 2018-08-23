@@ -4,11 +4,13 @@ from elasticsearch_dsl import Search
 from send_report import send_email_report
 from helper import report_name, format_time, y_date
 from config import report_config as cfg
+from ssl import create_default_context
 
 def get_user_list(client):
-    sender = Search(using=client, index='filebeat*')
+    sender = Search(using=client, index='maillog_atha*')
     sender = sender.query('match', SENDER=cfg['domain'])
-    sender = sender.filter('range', **{'@timestamp':{'gte': y_date(), 'lte': y_date()}})
+    #sender = sender.filter('range', **{'@timestamp':{'gte': y_date(), 'lte': y_date()}})
+    sender = sender.filter('range', **{'@timestamp':{'gte': 'now-200d', 'lte': 'now'}})	
     sender = sender.source(['SENDER'])
     data=[]
     for hit in sender.scan():
@@ -18,7 +20,8 @@ def get_user_list(client):
     
     recipient = Search(using=client, index='filebeat*')
     recipient = recipient.query('match', RECIPIENT=cfg['domain'])
-    recipient = recipient.filter('range', **{'@timestamp':{'gte': y_date(), 'lte': y_date()}})
+    #recipient = recipient.filter('range', **{'@timestamp':{'gte': y_date(), 'lte': y_date()}})
+    recipient = recipient.filter('range', **{'@timestamp':{'gte': 'now-200d', 'lte': 'now'}})
     recipient = recipient.source(['RECIPIENT'])
     data=[]
     for hit in recipient.scan():
@@ -42,9 +45,10 @@ def get_user_list(client):
     return filtered_user_list
     
 def get_sender_data(client, user):
-    sender = Search(using=client, index='filebeat*')
+    sender = Search(using=client, index='maillog_atha*')
     sender = sender.query('match', SENDER=user)
-    sender = sender.filter('range', **{'@timestamp':{'gte': y_date(), 'lte': y_date()}})
+    #sender = sender.filter('range', **{'@timestamp':{'gte': y_date(), 'lte': y_date()}})
+    sender = sender.filter('range', **{'@timestamp':{'gte': 'now-200d', 'lte': 'now'}})
     sender = sender.source(['SENDER','RECIPIENT', 'SUBJECT', 'SIZE', 'ATTACHMENT', '@timestamp', 'MTA'])
     data=[]
     domain = '@' + cfg['domain']
@@ -56,27 +60,34 @@ def get_sender_data(client, user):
             record = []
             time = format_time(hit.__dict__['_d_']['@timestamp'])
             record.append(time)
-            record.append(hit.__dict__['_d_']['RECIPIENT'])
-            record.append(hit.__dict__['_d_']['SUBJECT'])
-            record.append(hit.__dict__['_d_']['SIZE'])
-            record.append(hit.__dict__['_d_']['ATTACHMENT'])
+            try:
+                record.append(hit.__dict__['_d_']['RECIPIENT'])
+                record.append(hit.__dict__['_d_']['SUBJECT'])
+                record.append(hit.__dict__['_d_']['SIZE'])
+                record.append(hit.__dict__['_d_']['ATTACHMENT'])
+            except:
+                print "record not proper"
             data.append(record)
-        if sender_ph == user and mta_ph == 'QMAIL' and domain in recipient_ph:
+        if sender_ph == user and mta_ph == 'qmail' and domain in recipient_ph:
             record = []
             time = format_time(hit.__dict__['_d_']['@timestamp'])
             record.append(time)
-            record.append(hit.__dict__['_d_']['RECIPIENT'])
-            record.append(hit.__dict__['_d_']['SUBJECT'])
-            record.append(hit.__dict__['_d_']['SIZE'])
-            record.append(hit.__dict__['_d_']['ATTACHMENT'])
+            try:
+                record.append(hit.__dict__['_d_']['RECIPIENT'])
+                record.append(hit.__dict__['_d_']['SUBJECT'])
+                record.append(hit.__dict__['_d_']['SizeinKB'])
+                record.append(hit.__dict__['_d_']['AttachmentList'])
+            except:
+                print "record not proper"
             data.append(record)
         
     return data
     
 def get_recipient_data(client, user):
-    recipient = Search(using=client, index='filebeat*')
+    recipient = Search(using=client, index='maillog_atha*')
     recipient = recipient.query('match', RECIPIENT=user)
-    recipient = recipient.filter('range', **{'@timestamp':{'gte': y_date(), 'lte': y_date()}})
+    #recipient = recipient.filter('range', **{'@timestamp':{'gte': y_date(), 'lte': y_date()}})
+    recipient = recipient.filter('range', **{'@timestamp':{'gte': 'now-200d', 'lte': 'now'}})
     recipient = recipient.source(['SENDER','RECIPIENT', 'SUBJECT', 'SIZE', 'ATTACHMENT', '@timestamp'])
     data=[]
     for hit in recipient.scan():
@@ -84,19 +95,30 @@ def get_recipient_data(client, user):
             record = []
             time = format_time(hit.__dict__['_d_']['@timestamp'])
             record.append(time)
-            record.append(hit.__dict__['_d_']['SENDER'])
-            record.append(hit.__dict__['_d_']['SUBJECT'])
-            record.append(hit.__dict__['_d_']['SIZE'])
-            record.append(hit.__dict__['_d_']['ATTACHMENT'])
+            try:
+              record.append(hit.__dict__['_d_']['SENDER'])
+              record.append(hit.__dict__['_d_']['SUBJECT'])
+              record.append(hit.__dict__['_d_']['SIZE'])
+              record.append(hit.__dict__['_d_']['ATTACHMENT'])
+            except:
+              print "Record not proper"
             data.append(record)
         
     return data
     
 def fetch_data():
-    client = Elasticsearch([{'host': 'localhost', 'port': 9200}])
+    context = create_default_context(cafile="/etc/logstash/root-ca.pem")
+    #client = Elasticsearch(
+    #         ['localhost'], 
+    #         http_auth=('admin', 'admin1'),
+    #         scheme="https",
+    #         port=9200,
+    #         ssl_context=context,
+    #         )
+    client = Elasticsearch(['https://admin:admin@localhost:9200'], verify_certs=False )
     user_list = get_user_list(client)
-    sender_fields = [['Time', 'Recipient', 'Subject', 'Size Bytes', 'Attachment']]
-    recipient_fields = [['Time', 'Sender', 'Subject', 'Size Bytes', 'Attachment']]
+    sender_fields = [['Time', 'Recipient', 'Subject', 'Size KB', 'Attachment']]
+    recipient_fields = [['Time', 'Sender', 'Subject', 'Size KB', 'Attachment']]
     
     report_file_name = report_name()
     doc = CreateReport(title=report_file_name)
@@ -116,7 +138,7 @@ def fetch_data():
         
     
     doc.create()
-    send_email_report(report_file_name)
+    #send_email_report(report_file_name)
         
 if __name__ == "__main__":
     fetch_data()

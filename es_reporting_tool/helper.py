@@ -20,5 +20,5 @@ def report_name():
     return report_name
     
 def y_date():
-    yesterday = date.today() - timedelta(1)
+    yesterday = date.today() - timedelta(100)
     return yesterday
