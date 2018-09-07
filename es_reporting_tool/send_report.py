@@ -12,7 +12,7 @@ def send_email_report(report_file):
     msg = MIMEMultipart()
     
     msg['From'] = fromaddr
-    msg['To'] = toaddr
+    msg['To'] = ", ".join(toaddr)
     msg['Subject'] = cfg['email_subject']
     
     body = cfg['email_body']

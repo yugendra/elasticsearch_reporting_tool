@@ -10,7 +10,7 @@ def get_user_list(client):
     sender = Search(using=client, index='maillog_atha*')
     sender = sender.query('match', SENDER=cfg['domain'])
     #sender = sender.filter('range', **{'@timestamp':{'gte': y_date(), 'lte': y_date()}})
-    sender = sender.filter('range', **{'@timestamp':{'gte': 'now-200d', 'lte': 'now'}})	
+    sender = sender.filter('range', **{'@timestamp':{'gte': 'now-24h', 'lte': 'now'}})	
     sender = sender.source(['SENDER'])
     data=[]
     for hit in sender.scan():
@@ -21,7 +21,7 @@ def get_user_list(client):
     recipient = Search(using=client, index='filebeat*')
     recipient = recipient.query('match', RECIPIENT=cfg['domain'])
     #recipient = recipient.filter('range', **{'@timestamp':{'gte': y_date(), 'lte': y_date()}})
-    recipient = recipient.filter('range', **{'@timestamp':{'gte': 'now-200d', 'lte': 'now'}})
+    recipient = recipient.filter('range', **{'@timestamp':{'gte': 'now-24h', 'lte': 'now'}})
     recipient = recipient.source(['RECIPIENT'])
     data=[]
     for hit in recipient.scan():
@@ -48,7 +48,7 @@ def get_sender_data(client, user):
     sender = Search(using=client, index='maillog_atha*')
     sender = sender.query('match', SENDER=user)
     #sender = sender.filter('range', **{'@timestamp':{'gte': y_date(), 'lte': y_date()}})
-    sender = sender.filter('range', **{'@timestamp':{'gte': 'now-200d', 'lte': 'now'}})
+    sender = sender.filter('range', **{'@timestamp':{'gte': 'now-24h', 'lte': 'now'}})
     sender = sender.source(['SENDER','RECIPIENT', 'SUBJECT', 'SIZE', 'ATTACHMENT', '@timestamp', 'MTA'])
     data=[]
     domain = '@' + cfg['domain']
@@ -60,25 +60,19 @@ def get_sender_data(client, user):
             record = []
             time = format_time(hit.__dict__['_d_']['@timestamp'])
             record.append(time)
-            try:
-                record.append(hit.__dict__['_d_']['RECIPIENT'])
-                record.append(hit.__dict__['_d_']['SUBJECT'])
-                record.append(hit.__dict__['_d_']['SIZE'])
-                record.append(hit.__dict__['_d_']['ATTACHMENT'])
-            except:
-                print "record not proper"
+            record.append(hit.__dict__['_d_']['RECIPIENT'])
+            record.append(hit.__dict__['_d_']['SUBJECT'])
+            record.append(hit.__dict__['_d_']['SIZE'])
+            record.append(hit.__dict__['_d_']['ATTACHMENT'])
             data.append(record)
         if sender_ph == user and mta_ph == 'qmail' and domain in recipient_ph:
             record = []
             time = format_time(hit.__dict__['_d_']['@timestamp'])
             record.append(time)
-            try:
-                record.append(hit.__dict__['_d_']['RECIPIENT'])
-                record.append(hit.__dict__['_d_']['SUBJECT'])
-                record.append(hit.__dict__['_d_']['SizeinKB'])
-                record.append(hit.__dict__['_d_']['AttachmentList'])
-            except:
-                print "record not proper"
+            record.append(hit.__dict__['_d_']['RECIPIENT'])
+            record.append(hit.__dict__['_d_']['SUBJECT'])
+            record.append(hit.__dict__['_d_']['SIZE'])
+            record.append(hit.__dict__['_d_']['ATTACHMENT'])
             data.append(record)
         
     return data
@@ -87,7 +81,7 @@ def get_recipient_data(client, user):
     recipient = Search(using=client, index='maillog_atha*')
     recipient = recipient.query('match', RECIPIENT=user)
     #recipient = recipient.filter('range', **{'@timestamp':{'gte': y_date(), 'lte': y_date()}})
-    recipient = recipient.filter('range', **{'@timestamp':{'gte': 'now-200d', 'lte': 'now'}})
+    recipient = recipient.filter('range', **{'@timestamp':{'gte': 'now-24h', 'lte': 'now'}})
     recipient = recipient.source(['SENDER','RECIPIENT', 'SUBJECT', 'SIZE', 'ATTACHMENT', '@timestamp'])
     data=[]
     for hit in recipient.scan():
@@ -95,13 +89,10 @@ def get_recipient_data(client, user):
             record = []
             time = format_time(hit.__dict__['_d_']['@timestamp'])
             record.append(time)
-            try:
-              record.append(hit.__dict__['_d_']['SENDER'])
-              record.append(hit.__dict__['_d_']['SUBJECT'])
-              record.append(hit.__dict__['_d_']['SIZE'])
-              record.append(hit.__dict__['_d_']['ATTACHMENT'])
-            except:
-              print "Record not proper"
+            record.append(hit.__dict__['_d_']['SENDER'])
+            record.append(hit.__dict__['_d_']['SUBJECT'])
+            record.append(hit.__dict__['_d_']['SIZE'])
+            record.append(hit.__dict__['_d_']['ATTACHMENT'])
             data.append(record)
         
     return data
@@ -129,7 +120,12 @@ def fetch_data():
         doc.add_user_header("Mail Sent")
         doc.add_table_data(sender_fields, style='THeader')
         sender_data = get_sender_data(client, user)
-        if sender_data: doc.add_table_data(sender_data, style='TData')
+        if sender_data:
+            for s in sender_data:
+                for i in range(len(s)):
+                    if not s[i]:
+                        s[i] = " " 
+            doc.add_table_data(sender_data, style='TData')
         doc.add_user_header("Mail Received")
         doc.add_table_data(recipient_fields, style='THeader')
         recipient_data = get_recipient_data(client, user)
@@ -138,7 +134,7 @@ def fetch_data():
         
     
     doc.create()
-    #send_email_report(report_file_name)
+    send_email_report(report_file_name)
         
 if __name__ == "__main__":
     fetch_data()
