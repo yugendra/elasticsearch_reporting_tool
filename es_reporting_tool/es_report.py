@@ -5,6 +5,7 @@ from send_report import send_email_report
 from helper import report_name, format_time, y_date
 from config import report_config as cfg
 from ssl import create_default_context
+from string import lower
 
 def get_user_list(client):
     sender = Search(using=client, index='maillog_atha*')
@@ -56,7 +57,7 @@ def get_sender_data(client, user):
         sender_ph = hit.__dict__['_d_']['SENDER']
         recipient_ph = hit.__dict__['_d_']['RECIPIENT']
         mta_ph = hit.__dict__['_d_']['MTA']
-        if sender_ph == user and mta_ph == 'postfix-outgoing':
+        if sender_ph == user and lower(mta_ph) == 'postfix-outgoing':
             record = []
             time = format_time(hit.__dict__['_d_']['@timestamp'])
             record.append(time)
@@ -65,7 +66,7 @@ def get_sender_data(client, user):
             record.append(hit.__dict__['_d_']['SIZE'])
             record.append(hit.__dict__['_d_']['ATTACHMENT'])
             data.append(record)
-        if sender_ph == user and mta_ph == 'qmail' and domain in recipient_ph:
+        if sender_ph == user and lower(mta_ph) == 'qmail' and domain in recipient_ph:
             record = []
             time = format_time(hit.__dict__['_d_']['@timestamp'])
             record.append(time)
@@ -99,13 +100,6 @@ def get_recipient_data(client, user):
     
 def fetch_data():
     context = create_default_context(cafile="/etc/logstash/root-ca.pem")
-    #client = Elasticsearch(
-    #         ['localhost'], 
-    #         http_auth=('admin', 'admin1'),
-    #         scheme="https",
-    #         port=9200,
-    #         ssl_context=context,
-    #         )
     client = Elasticsearch(['https://admin:admin@localhost:9200'], verify_certs=False )
     user_list = get_user_list(client)
     sender_fields = [['Time', 'Recipient', 'Subject', 'Size KB', 'Attachment']]
@@ -134,7 +128,7 @@ def fetch_data():
         
     
     doc.create()
-    send_email_report(report_file_name)
+    #send_email_report(report_file_name)
         
 if __name__ == "__main__":
     fetch_data()
