@@ -128,7 +128,7 @@ def fetch_data():
         
     
     doc.create()
-    #send_email_report(report_file_name)
+    send_email_report(report_file_name)
         
 if __name__ == "__main__":
     fetch_data()
