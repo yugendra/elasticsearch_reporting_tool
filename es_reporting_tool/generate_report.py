@@ -5,6 +5,8 @@ from reportlab.lib.pagesizes import A3
 from reportlab.platypus import Paragraph, SimpleDocTemplate, Table, TableStyle
 from reportlab.lib.enums import TA_CENTER
 
+import datetime
+
 class CreateReport():
     def __init__(self, title='SampleReport.pdf'):
         self.title = title
@@ -37,7 +39,19 @@ class CreateReport():
             style = self.TableHeaderStyle
         else:
             style = self.normalStyle
+
+        for i in range(len(data)):
+            if data[i][0] == "Time":
+                continue
+            for j in range(i+1, len(data)):
+                iDate = datetime.datetime.strptime(data[i][0], "%Y-%m-%d %H:%M:%S")
+                jDate = datetime.datetime.strptime(data[j][0], "%Y-%m-%d %H:%M:%S")
+                if iDate > jDate:
+                    tmp = data[i]
+                    data[i] = data[j]
+                    data[j] = tmp
             
+
         table_halign='LEFT'
         data_align='LEFT'
         data1 = []
