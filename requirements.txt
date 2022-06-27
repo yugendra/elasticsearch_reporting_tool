@@ -3,6 +3,6 @@ elasticsearch-dsl==6.1.0
 ipaddress==1.0.19
 Pillow==5.0.0
 python-dateutil==2.6.1
-reportlab==3.4.0
+reportlab==3.5.55
 six==1.11.0
 urllib3==1.22
